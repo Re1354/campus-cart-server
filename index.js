@@ -15,6 +15,7 @@ const categoryRoutes = require('./src/modules/category/category.routes');
 const productRoutes = require('./src/modules/product/product.routes');
 const cartRoutes = require('./src/modules/cart/cart.routes');
 const orderRoutes = require('./src/modules/order/order.routes');
+const vendorDashboardRoutes = require('./src/modules/vendor/dashboard.routes');
 
 // Global error handler (must be last)
 const errorHandler = require('./src/middleware/error.middleware');
@@ -69,6 +70,9 @@ app.use('/api/cart', cartRoutes);
 
 // Order routes
 app.use('/api', orderRoutes);
+
+// Vendor dashboard routes
+app.use('/api', vendorDashboardRoutes);
 
 // ─── Global Error Handler (must be last) ─────────────────────────────────────
 
