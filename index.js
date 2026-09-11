@@ -14,6 +14,7 @@ const authRoutes = require('./src/routes/auth.routes');
 const categoryRoutes = require('./src/modules/category/category.routes');
 const productRoutes = require('./src/modules/product/product.routes');
 const cartRoutes = require('./src/modules/cart/cart.routes');
+const orderRoutes = require('./src/modules/order/order.routes');
 
 // Global error handler (must be last)
 const errorHandler = require('./src/middleware/error.middleware');
@@ -65,6 +66,9 @@ app.use('/api', productRoutes);
 
 // Cart routes
 app.use('/api/cart', cartRoutes);
+
+// Order routes
+app.use('/api', orderRoutes);
 
 // ─── Global Error Handler (must be last) ─────────────────────────────────────
 
