@@ -28,7 +28,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Multer upload middleware with 2MB size limit and maximum 5 files
+// Multer upload middleware with 2MB size limit and maximum 5 files for products
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
@@ -38,4 +38,26 @@ const upload = multer({
   },
 });
 
+// Category-specific Cloudinary storage
+const categoryStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'campus_cart/categories',
+    allowed_formats: ['jpeg', 'png', 'jpg', 'webp'],
+  },
+});
+
+// Multer upload middleware for category banners/thumbnails (up to 5MB, single image)
+const uploadCategory = multer({
+  storage: categoryStorage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit for categories
+    files: 1,
+  },
+});
+
+upload.category = uploadCategory;
+
 module.exports = upload;
+

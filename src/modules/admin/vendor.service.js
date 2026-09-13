@@ -177,12 +177,15 @@ const rejectVendor = async (id, reason) => {
 
   const updated = await prisma.vendorProfile.update({
     where: { userId: id },
-    data: { status: 'REJECTED' },
+    data: {
+      status: 'REJECTED',
+      rejectionReason: reason ? reason.trim() : 'Application rejected by administration',
+    },
   });
 
   return {
     vendorProfile: updated,
-    reason: reason || 'Application rejected by administration',
+    reason: updated.rejectionReason,
   };
 };
 

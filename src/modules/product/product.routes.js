@@ -61,6 +61,9 @@ router.delete(
 // GET /api/products -> List all active products (query params: category, search, page, limit)
 router.get('/products', productController.getPublicProducts);
 
+// GET /api/products/top-selling -> List top-selling products by order count
+router.get('/products/top-selling', productController.getTopSellingProducts);
+
 // GET /api/products/:slug -> Get single active product detail by slug
 router.get('/products/:slug', productController.getPublicProductBySlug);
 

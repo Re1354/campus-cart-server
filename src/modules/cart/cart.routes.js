@@ -16,10 +16,11 @@ router.delete('/', cartController.clearCart);
 // POST /api/cart/items -> Add item to cart
 router.post('/items', cartController.addItem);
 
-// PATCH /api/cart/items/:productId -> Update item quantity
-router.patch('/items/:productId', cartController.updateItem);
+// PATCH or PUT /api/cart/items/:id -> Update item quantity (accepts cartItem.id or productId)
+router.patch('/items/:id', cartController.updateItem);
+router.put('/items/:id', cartController.updateItem);
 
-// DELETE /api/cart/items/:productId -> Remove single item from cart
-router.delete('/items/:productId', cartController.removeItem);
+// DELETE /api/cart/items/:id -> Remove single item from cart (accepts cartItem.id or productId)
+router.delete('/items/:id', cartController.removeItem);
 
 module.exports = router;

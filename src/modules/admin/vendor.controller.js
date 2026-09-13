@@ -1,4 +1,5 @@
 const catchAsync = require('../../utils/catchAsync');
+const AppError = require('../../utils/AppError');
 const vendorService = require('./vendor.service');
 
 /**
@@ -37,9 +38,14 @@ exports.approveVendor = catchAsync(async (req, res) => {
  * PATCH /api/admin/vendors/:id/reject
  * Set VendorProfile.status to REJECTED with optional reason
  */
-exports.rejectVendor = catchAsync(async (req, res) => {
+exports.rejectVendor = catchAsync(async (req, res, next) => {
   const { id } = req.params;
   const { reason } = req.body;
+
+  if (!reason || !reason.trim()) {
+    return next(new AppError('Rejection reason is required', 400));
+  }
+
   const result = await vendorService.rejectVendor(id, reason);
   res.status(200).json({
     message: 'Vendor application rejected',

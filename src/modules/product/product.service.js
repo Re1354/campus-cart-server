@@ -323,9 +323,9 @@ const softDeleteVendorProduct = async (vendorId, productId) => {
  * @param {Object} queryParams
  */
 const getPublicProducts = async (queryParams) => {
-  const { category, search } = queryParams;
+  const { category, search, featured, inStock, maxPrice, sortBy, sortOrder } = queryParams;
   const page = Math.max(1, parseInt(queryParams.page, 10) || 1);
-  const limit = Math.max(1, Math.min(100, parseInt(queryParams.limit, 10) || 12));
+  const limit = Math.max(1, Math.min(100, parseInt(queryParams.limit, 10) || 9));
   const skip = (page - 1) * limit;
 
   const where = {
@@ -342,17 +342,83 @@ const getPublicProducts = async (queryParams) => {
         { description: { contains: search.trim(), mode: 'insensitive' } },
       ],
     }),
+    ...(featured === 'true' && { isFeatured: true }),
+    ...(inStock === 'true' && { stock: { gt: 0 } }),
+    ...(maxPrice && !isNaN(Number(maxPrice)) && { price: { lte: Number(maxPrice) } }),
   };
+
+  let orderBy = [
+    { isFeatured: 'desc' },
+    { createdAt: 'desc' },
+  ];
+
+  if (sortBy === 'price') {
+    orderBy = [{ price: sortOrder === 'asc' ? 'asc' : 'desc' }];
+  } else if (sortBy === 'createdAt') {
+    orderBy = [{ createdAt: sortOrder === 'asc' ? 'asc' : 'desc' }];
+  }
+
+  if (sortBy === 'orderCount' || sortBy === 'orders' || queryParams.topSelling === 'true') {
+    const allProducts = await prisma.product.findMany({
+      where,
+      select: {
+        ...PUBLIC_PRODUCT_SELECT,
+        orderItems: {
+          where: {
+            order: {
+              status: { not: 'CANCELLED' },
+            },
+          },
+          select: {
+            quantity: true,
+            orderId: true,
+          },
+        },
+      },
+    });
+
+    const ranked = allProducts.map((p) => {
+      const uniqueOrderIds = new Set(p.orderItems.map((item) => item.orderId));
+      const orderCount = uniqueOrderIds.size;
+      const unitsSold = p.orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+      const { orderItems, ...productData } = p;
+      return {
+        ...productData,
+        orderCount,
+        unitsSold,
+      };
+    });
+
+    ranked.sort((a, b) => {
+      if (b.orderCount !== a.orderCount) return b.orderCount - a.orderCount;
+      if (b.unitsSold !== a.unitsSold) return b.unitsSold - a.unitsSold;
+      if (b.isFeatured !== a.isFeatured) return (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0);
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    const total = ranked.length;
+    const paginatedProducts = ranked.slice(skip, skip + limit);
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      products: paginatedProducts,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    };
+  }
 
   const [total, products] = await Promise.all([
     prisma.product.count({ where }),
     prisma.product.findMany({
       where,
       select: PUBLIC_PRODUCT_SELECT,
-      orderBy: [
-        { isFeatured: 'desc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy,
       skip,
       take: limit,
     }),
@@ -370,6 +436,69 @@ const getPublicProducts = async (queryParams) => {
       hasNextPage: page < totalPages,
       hasPrevPage: page > 1,
     },
+  };
+};
+
+/**
+ * List top selling products ranked strictly by most order count.
+ * Calculates count of unique non-cancelled orders containing each product.
+ * Ties are broken by total units sold DESC, then isFeatured DESC, then createdAt DESC.
+ * STRICT RULE: Never includes vendorId, vendor, or vendorProfile in response.
+ * @param {Object} queryParams - { limit }
+ */
+const getTopSellingProducts = async (queryParams = {}) => {
+  const limit = Math.max(1, Math.min(20, parseInt(queryParams.limit, 10) || 4));
+
+  const products = await prisma.product.findMany({
+    where: { isActive: true },
+    select: {
+      ...PUBLIC_PRODUCT_SELECT,
+      orderItems: {
+        where: {
+          order: {
+            status: { not: 'CANCELLED' },
+          },
+        },
+        select: {
+          quantity: true,
+          orderId: true,
+        },
+      },
+    },
+  });
+
+  const ranked = products.map((p) => {
+    const uniqueOrderIds = new Set(p.orderItems.map((item) => item.orderId));
+    const orderCount = uniqueOrderIds.size;
+    const unitsSold = p.orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const { orderItems, ...productData } = p;
+    return {
+      ...productData,
+      orderCount,
+      unitsSold,
+    };
+  });
+
+  ranked.sort((a, b) => {
+    // 1. Primary: order count DESC (most order count first)
+    if (b.orderCount !== a.orderCount) {
+      return b.orderCount - a.orderCount;
+    }
+    // 2. Secondary: units sold DESC
+    if (b.unitsSold !== a.unitsSold) {
+      return b.unitsSold - a.unitsSold;
+    }
+    // 3. Featured flag
+    if (b.isFeatured !== a.isFeatured) {
+      return (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0);
+    }
+    // 4. Most recent
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  return {
+    count: Math.min(ranked.length, limit),
+    products: ranked.slice(0, limit),
   };
 };
 
@@ -405,5 +534,6 @@ module.exports = {
   updateVendorProduct,
   softDeleteVendorProduct,
   getPublicProducts,
+  getTopSellingProducts,
   getPublicProductBySlug,
 };

@@ -396,10 +396,122 @@ const updateVendorProfile = async (vendorId, data) => {
   return updatedProfile;
 };
 
+/**
+ * GET /api/vendor/earnings
+ * Detailed breakdown of vendor earnings, commission deductions, and net payout.
+ * @param {string} vendorId
+ */
+const getVendorEarnings = async (vendorId) => {
+  const profile = await prisma.vendorProfile.findUnique({
+    where: { userId: vendorId },
+    select: {
+      businessName: true,
+      commissionRate: true,
+      payoutDetails: true,
+    },
+  });
+
+  if (!profile) {
+    throw new AppError('Vendor profile not found', 404);
+  }
+
+  const commissionRate = profile.commissionRate || 10.0;
+
+  // Realized earnings from DELIVERED order items
+  const deliveredItems = await prisma.orderItem.findMany({
+    where: {
+      vendorId,
+      order: {
+        status: 'DELIVERED',
+      },
+    },
+    include: {
+      product: {
+        select: {
+          name: true,
+          slug: true,
+        },
+      },
+      order: {
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: {
+      order: {
+        createdAt: 'desc',
+      },
+    },
+  });
+
+  const grossEarnings = Number(
+    deliveredItems
+      .reduce((sum, item) => sum + Number(item.priceAtTime) * item.quantity, 0)
+      .toFixed(2)
+  );
+
+  const platformFee = Number(((grossEarnings * commissionRate) / 100).toFixed(2));
+  const netPayout = Number((grossEarnings - platformFee).toFixed(2));
+
+  // Pending earnings from pipeline orders
+  const pendingItems = await prisma.orderItem.findMany({
+    where: {
+      vendorId,
+      order: {
+        status: { in: ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'] },
+      },
+    },
+    select: {
+      priceAtTime: true,
+      quantity: true,
+    },
+  });
+
+  const grossPending = Number(
+    pendingItems
+      .reduce((sum, item) => sum + Number(item.priceAtTime) * item.quantity, 0)
+      .toFixed(2)
+  );
+  const estimatedNetPending = Number(
+    (grossPending * (1 - commissionRate / 100)).toFixed(2)
+  );
+
+  return {
+    commissionRate,
+    payoutDetails: profile.payoutDetails,
+    summary: {
+      grossEarnings,
+      platformFee,
+      netPayout,
+      grossPending,
+      estimatedNetPending,
+      deliveredUnits: deliveredItems.reduce((sum, item) => sum + item.quantity, 0),
+    },
+    recentDeliveredItems: deliveredItems.slice(0, 10).map((item) => {
+      const priceAtTime = Number(item.priceAtTime);
+      const total = Number((priceAtTime * item.quantity).toFixed(2));
+      const fee = Number(((total * commissionRate) / 100).toFixed(2));
+      return {
+        orderId: item.order.id,
+        date: item.order.createdAt,
+        productName: item.product?.name || 'Product',
+        quantity: item.quantity,
+        priceAtTime,
+        grossTotal: total,
+        platformFee: fee,
+        netTotal: Number((total - fee).toFixed(2)),
+      };
+    }),
+  };
+};
+
 module.exports = {
   getDashboardStats,
   getRecentOrders,
   getRevenueChart,
   getVendorProfile,
   updateVendorProfile,
+  getVendorEarnings,
 };

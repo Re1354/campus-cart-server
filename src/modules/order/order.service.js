@@ -143,17 +143,25 @@ const createOrder = async (userId, data) => {
       },
     });
 
-    // d. Decrement stock from each product in parallel
-    await Promise.all(
-      cart.items.map((item) =>
-        tx.product.update({
-          where: { id: item.productId },
-          data: {
-            stock: { decrement: item.quantity },
-          },
-        })
-      )
-    );
+    // d. Decrement stock from each product atomically with stock >= quantity constraint
+    for (const item of cart.items) {
+      const updated = await tx.product.updateMany({
+        where: {
+          id: item.productId,
+          stock: { gte: item.quantity },
+        },
+        data: {
+          stock: { decrement: item.quantity },
+        },
+      });
+
+      if (updated.count === 0) {
+        throw new AppError(
+          `Insufficient stock available for product "${item.product?.name || item.productId}".`,
+          400
+        );
+      }
+    }
 
     // e. Clear user's cart
     await tx.cartItem.deleteMany({
@@ -666,14 +674,222 @@ const updateOrderStatus = async (orderId, status) => {
   return updated;
 };
 
+/**
+ * Confirm order delivery.
+ * Allowed callers:
+ * - The buyer who placed the order
+ * - A vendor whose products are in this order
+ * - Admin
+ *
+ * @param {string} orderId
+ * @param {Object} user - { id, role }
+ */
+const confirmDelivery = async (orderId, user) => {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              images: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  const isBuyer = order.userId === user.id;
+  const isVendor = order.items.some((item) => item.vendorId === user.id);
+  const isAdmin = user.role === 'ADMIN';
+
+  if (!isBuyer && !isVendor && !isAdmin) {
+    throw new AppError('You are not authorized to confirm delivery for this order', 403);
+  }
+
+  if (order.status === 'CANCELLED') {
+    throw new AppError('Cannot confirm delivery for a cancelled order', 400);
+  }
+
+  if (order.status === 'DELIVERED') {
+    return {
+      message: 'Order is already marked as delivered',
+      order: isBuyer ? formatBuyerOrder(order) : order,
+    };
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: 'DELIVERED',
+    },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              images: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return {
+    message: 'Delivery confirmed successfully',
+    order: isBuyer ? formatBuyerOrder(updatedOrder) : updatedOrder,
+  };
+};
+
+/**
+ * Update order status by vendor.
+ * Allowed statuses for vendor: CONFIRMED, PROCESSING, SHIPPED.
+ * (For DELIVERED, vendors must use the confirm-delivery endpoint)
+ *
+ * @param {string} orderId
+ * @param {string} vendorId
+ * @param {string} status
+ */
+const updateVendorOrderStatus = async (orderId, vendorId, status) => {
+  const allowedVendorStatuses = ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+
+  if (!status || !allowedVendorStatuses.includes(status.toUpperCase())) {
+    throw new AppError(
+      `Invalid status. Vendors can transition orders to: ${allowedVendorStatuses.join(', ')}.`,
+      400
+    );
+  }
+
+  const targetStatus = status.toUpperCase();
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: true,
+    },
+  });
+
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  const belongsToVendor = order.items.some((item) => item.vendorId === vendorId);
+  if (!belongsToVendor) {
+    throw new AppError('You are not authorized to update this order', 403);
+  }
+
+  if (order.status === 'DELIVERED' || order.status === 'CANCELLED') {
+    throw new AppError(`Cannot update status of an order that is already ${order.status.toLowerCase()}`, 400);
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: { status: targetStatus },
+    include: {
+      items: {
+        where: { vendorId },
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              images: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return updatedOrder;
+};
+
+/**
+ * Public Order Tracking summary by Order ID.
+ * Safe for unauthenticated / cross-device lookup:
+ * Does NOT expose full private student details or vendor internals.
+ * Exposes: id, status, totalAmount, createdAt, items, and general campus delivery zone.
+ * @param {string} orderId
+ */
+const trackOrderPublic = async (orderId) => {
+  if (!orderId || !orderId.trim()) {
+    throw new AppError('Order ID is required', 400);
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId.trim() },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              images: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new AppError('Order not found', 404);
+  }
+
+  return {
+    id: order.id,
+    status: order.status,
+    totalAmount: Number(order.totalAmount),
+    shippingAddress: {
+      city: order.shippingAddress?.city || 'Campus Area',
+      address: order.shippingAddress?.address || 'Campus Location',
+      phone: order.shippingAddress?.phone
+        ? `${order.shippingAddress.phone.slice(0, 3)}****${order.shippingAddress.phone.slice(-3)}`
+        : '***',
+      name: order.shippingAddress?.name || 'Student',
+    },
+    deliveryCode: order.deliveryCode,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    items: (order.items || []).map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      name: item.product?.name || 'Product',
+      slug: item.product?.slug || null,
+      image: item.product?.images?.[0] || null,
+      priceAtTime: Number(item.priceAtTime),
+      quantity: item.quantity,
+      itemTotal: Number((Number(item.priceAtTime) * item.quantity).toFixed(2)),
+    })),
+  };
+};
+
 module.exports = {
   createOrder,
   getBuyerOrders,
   getBuyerOrderById,
   cancelBuyerOrder,
+  trackOrderPublic,
   getVendorOrders,
   getVendorOrderById,
+  updateVendorOrderStatus,
   getAdminOrders,
   getAdminOrderById,
   updateOrderStatus,
+  confirmDelivery,
 };

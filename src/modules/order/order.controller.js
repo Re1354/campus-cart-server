@@ -60,6 +60,19 @@ exports.cancelBuyerOrder = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/orders/track/:id
+ * Public tracking endpoint for an order
+ */
+exports.trackOrderPublic = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const order = await orderService.trackOrderPublic(id);
+
+  res.status(200).json({
+    order,
+  });
+});
+
 // ─── Vendor Controllers ───────────────────────────────────────────────────────
 
 /**
@@ -86,6 +99,22 @@ exports.getVendorOrderById = catchAsync(async (req, res) => {
   const order = await orderService.getVendorOrderById(vendorId, id);
 
   res.status(200).json({
+    order,
+  });
+});
+
+/**
+ * PATCH /api/vendor/orders/:id/status
+ * Vendor updates order status to CONFIRMED, PROCESSING, or SHIPPED
+ */
+exports.updateVendorOrderStatus = catchAsync(async (req, res) => {
+  const vendorId = req.user.id;
+  const { id } = req.params;
+  const { status } = req.body;
+  const order = await orderService.updateVendorOrderStatus(id, vendorId, status);
+
+  res.status(200).json({
+    message: 'Order status updated successfully',
     order,
   });
 });
@@ -128,4 +157,15 @@ exports.updateOrderStatus = catchAsync(async (req, res) => {
     message: 'Order status updated successfully',
     order,
   });
+});
+
+/**
+ * POST /api/orders/:id/confirm-delivery
+ * Confirm order delivery (Buyer, Vendor, or Admin)
+ */
+exports.confirmDelivery = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const result = await orderService.confirmDelivery(id, req.user);
+
+  res.status(200).json(result);
 });

@@ -32,3 +32,17 @@ exports.softDeleteUser = catchAsync(async (req, res) => {
     user,
   });
 });
+
+/**
+ * PATCH /api/admin/users/:id/status
+ * Toggle user active status (activate / deactivate)
+ */
+exports.toggleUserStatus = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const { isActive } = req.body;
+  const user = await userService.toggleUserStatus(id, isActive);
+  res.status(200).json({
+    message: `User account ${user.isActive ? 'activated' : 'deactivated'} successfully`,
+    user,
+  });
+});

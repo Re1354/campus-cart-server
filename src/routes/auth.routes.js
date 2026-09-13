@@ -21,10 +21,19 @@ router.get(
   authController.googleCallback
 );
 
-// ─── Vendor Auth ──────────────────────────────────────────────────────────────
+// ─── Credential Auth (Unified & Vendor) ───────────────────────────────────────
+
+// POST /api/auth/login (Unified login for ADMIN and VENDOR)
+router.post('/login', authController.login);
+
+// POST /api/auth/firebase-login (Syncs Firebase Auth sessions with PostgreSQL database)
+router.post('/firebase-login', authController.firebaseLogin);
 
 // POST /api/auth/vendor/register
 router.post('/vendor/register', authController.vendorRegister);
+
+// POST /api/auth/admin/login
+router.post('/admin/login', authController.adminLogin);
 
 // POST /api/auth/vendor/login
 router.post('/vendor/login', authController.vendorLogin);

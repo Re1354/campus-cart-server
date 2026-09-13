@@ -57,6 +57,7 @@ const formatCart = (cart) => {
     id: cart.id,
     items,
     cartTotal,
+    totalAmount: cartTotal,
     itemCount,
     updatedAt: cart.updatedAt,
   };
@@ -200,15 +201,16 @@ const addItemToCart = async (userId, productId, quantity = 1) => {
 };
 
 /**
- * PATCH /api/cart/items/:productId
+ * PATCH /api/cart/items/:id
  * Update specific item quantity in user's cart.
+ * Accepts either productId or cartItem.id as the identifier.
  * @param {string} userId
- * @param {string} productId
+ * @param {string} identifier
  * @param {number} quantity
  */
-const updateCartItemQuantity = async (userId, productId, quantity) => {
-  if (!productId) {
-    throw new AppError('Product ID is required', 400);
+const updateCartItemQuantity = async (userId, identifier, quantity) => {
+  if (!identifier) {
+    throw new AppError('Product ID or Item ID is required', 400);
   }
 
   const parsedQuantity = parseInt(quantity, 10);
@@ -216,19 +218,7 @@ const updateCartItemQuantity = async (userId, productId, quantity) => {
     throw new AppError('Quantity must be a positive integer', 400);
   }
 
-  // 1. Verify product exists and isActive === true
-  const product = await prisma.product.findFirst({
-    where: {
-      id: productId,
-      isActive: true,
-    },
-  });
-
-  if (!product) {
-    throw new AppError('Product not found', 404);
-  }
-
-  // 2. Find user's cart
+  // 1. Find user's cart
   const cart = await prisma.cart.findUnique({
     where: { userId },
   });
@@ -237,13 +227,17 @@ const updateCartItemQuantity = async (userId, productId, quantity) => {
     throw new AppError('Cart not found', 404);
   }
 
-  // 3. Find cart item
-  const existingItem = await prisma.cartItem.findUnique({
+  // 2. Find cart item by either productId or cartItem.id
+  const existingItem = await prisma.cartItem.findFirst({
     where: {
-      cartId_productId: {
-        cartId: cart.id,
-        productId,
-      },
+      cartId: cart.id,
+      OR: [
+        { productId: identifier },
+        { id: identifier },
+      ],
+    },
+    include: {
+      product: true,
     },
   });
 
@@ -251,12 +245,17 @@ const updateCartItemQuantity = async (userId, productId, quantity) => {
     throw new AppError('Item not found in cart', 404);
   }
 
-  // 4. Validate stock availability
-  if (parsedQuantity > product.stock) {
-    throw new AppError('Insufficient stock available', 400);
+  const product = existingItem.product;
+  if (!product || !product.isActive) {
+    throw new AppError('Product is no longer available', 404);
   }
 
-  // 5. Update quantity
+  // 3. Validate stock availability
+  if (parsedQuantity > product.stock) {
+    throw new AppError(`Insufficient stock available (only ${product.stock} available)`, 400);
+  }
+
+  // 4. Update quantity
   await prisma.cartItem.update({
     where: { id: existingItem.id },
     data: { quantity: parsedQuantity },
@@ -272,14 +271,15 @@ const updateCartItemQuantity = async (userId, productId, quantity) => {
 };
 
 /**
- * DELETE /api/cart/items/:productId
+ * DELETE /api/cart/items/:id
  * Remove single item from the cart.
+ * Accepts either productId or cartItem.id as the identifier.
  * @param {string} userId
- * @param {string} productId
+ * @param {string} identifier
  */
-const removeCartItem = async (userId, productId) => {
-  if (!productId) {
-    throw new AppError('Product ID is required', 400);
+const removeCartItem = async (userId, identifier) => {
+  if (!identifier) {
+    throw new AppError('Product ID or Item ID is required', 400);
   }
 
   const cart = await prisma.cart.findUnique({
@@ -290,12 +290,13 @@ const removeCartItem = async (userId, productId) => {
     throw new AppError('Cart not found', 404);
   }
 
-  const existingItem = await prisma.cartItem.findUnique({
+  const existingItem = await prisma.cartItem.findFirst({
     where: {
-      cartId_productId: {
-        cartId: cart.id,
-        productId,
-      },
+      cartId: cart.id,
+      OR: [
+        { productId: identifier },
+        { id: identifier },
+      ],
     },
   });
 

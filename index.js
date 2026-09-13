@@ -26,9 +26,23 @@ const PORT = process.env.PORT || 5000;
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
 
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL,
-  credentials: true, // required so cookies are sent cross-origin
+  origin: (origin, callback) => {
+    // allow requests with no origin (mobile, curl, Postman) or matched allowed origins
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Permissive in dev to avoid subtle local blocking
+  },
+  credentials: true,
 }));
 
 app.use(express.json());

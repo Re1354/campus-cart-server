@@ -23,6 +23,7 @@ exports.uploadImages = catchAsync(async (req, res, next) => {
   res.status(200).json({
     message: 'Images uploaded successfully',
     urls,
+    images: urls,
   });
 });
 
@@ -107,6 +108,17 @@ exports.deleteVendorProduct = catchAsync(async (req, res) => {
  */
 exports.getPublicProducts = catchAsync(async (req, res) => {
   const result = await productService.getPublicProducts(req.query);
+
+  res.status(200).json(result);
+});
+
+/**
+ * GET /api/products/top-selling
+ * List top-selling products ranked by most order count.
+ * Excludes all vendor info.
+ */
+exports.getTopSellingProducts = catchAsync(async (req, res) => {
+  const result = await productService.getTopSellingProducts(req.query);
 
   res.status(200).json(result);
 });

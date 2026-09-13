@@ -156,8 +156,38 @@ const softDeleteUser = async (id) => {
   return updatedUser;
 };
 
+const toggleUserStatus = async (id, isActive) => {
+  const user = await prisma.user.findUnique({
+    where: { id },
+  });
+
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  const newStatus = typeof isActive === 'boolean' ? isActive : !user.isActive;
+
+  const updatedUser = await prisma.user.update({
+    where: { id },
+    data: { isActive: newStatus },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isActive: true,
+      mobileNumber: true,
+      mobileVerified: true,
+      createdAt: true,
+    },
+  });
+
+  return updatedUser;
+};
+
 module.exports = {
   listUsers,
   getUserDetail,
   softDeleteUser,
+  toggleUserStatus,
 };

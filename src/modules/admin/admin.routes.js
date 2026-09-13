@@ -23,6 +23,7 @@ router.patch('/vendors/:id/commission', vendorController.updateCommission);
 // ─── b. Buyer Account Management ──────────────────────────────────────────────
 router.get('/users', userController.listUsers);
 router.get('/users/:id', userController.getUserDetail);
+router.patch('/users/:id/status', userController.toggleUserStatus);
 router.delete('/users/:id', userController.softDeleteUser);
 
 // ─── c. Platform Overview & Dashboard Stats ───────────────────────────────────

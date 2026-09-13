@@ -5,6 +5,10 @@ const authenticate = require('../../middleware/authenticate');
 const requireRole = require('../../middleware/requireRole');
 const requireApprovedVendor = require('../../middleware/requireApprovedVendor');
 
+// ─── Public Tracking Route (No auth strictly required) ───────────────────
+// GET /api/orders/track/:id -> Public tracking summary for any order
+router.get('/orders/track/:id', orderController.trackOrderPublic);
+
 // ─── Buyer Routes (Protected: authenticate + requireRole(['USER'])) ───────────
 
 // POST /api/orders -> Place order from items in user's Cart
@@ -39,6 +43,13 @@ router.patch(
   orderController.cancelBuyerOrder
 );
 
+// POST /api/orders/:id/confirm-delivery -> Confirm order delivery
+router.post(
+  '/orders/:id/confirm-delivery',
+  authenticate,
+  orderController.confirmDelivery
+);
+
 // ─── Vendor Routes (Protected: authenticate + requireApprovedVendor) ──────────
 
 // GET /api/vendor/orders -> List orders containing products belonging to logged-in vendor
@@ -55,6 +66,14 @@ router.get(
   authenticate,
   requireApprovedVendor,
   orderController.getVendorOrderById
+);
+
+// PATCH /api/vendor/orders/:id/status -> Vendor updates order status to CONFIRMED, PROCESSING, SHIPPED
+router.patch(
+  '/vendor/orders/:id/status',
+  authenticate,
+  requireApprovedVendor,
+  orderController.updateVendorOrderStatus
 );
 
 // ─── Admin Routes (Protected: authenticate + requireRole(['ADMIN'])) ──────────

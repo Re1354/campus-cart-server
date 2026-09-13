@@ -68,3 +68,14 @@ exports.updateProfile = catchAsync(async (req, res) => {
     vendorProfile: updatedProfile,
   });
 });
+
+/**
+ * GET /api/vendor/earnings
+ * Detailed earnings, commission deductions, and net payout
+ */
+exports.getEarnings = catchAsync(async (req, res) => {
+  const vendorId = req.user.id || req.user.userId;
+  const earningsData = await dashboardService.getVendorEarnings(vendorId);
+
+  res.status(200).json(earningsData);
+});

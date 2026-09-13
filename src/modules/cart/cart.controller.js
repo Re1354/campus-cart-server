@@ -35,9 +35,9 @@ exports.addItem = catchAsync(async (req, res) => {
  */
 exports.updateItem = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  const { productId } = req.params;
+  const identifier = req.params.id || req.params.productId;
   const { quantity } = req.body;
-  const cart = await cartService.updateCartItemQuantity(userId, productId, quantity);
+  const cart = await cartService.updateCartItemQuantity(userId, identifier, quantity);
 
   res.status(200).json({
     message: 'Cart item updated',
@@ -46,13 +46,13 @@ exports.updateItem = catchAsync(async (req, res) => {
 });
 
 /**
- * DELETE /api/cart/items/:productId
+ * DELETE /api/cart/items/:id (or :productId)
  * Remove single item from user's cart
  */
 exports.removeItem = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  const { productId } = req.params;
-  const cart = await cartService.removeCartItem(userId, productId);
+  const identifier = req.params.id || req.params.productId;
+  const cart = await cartService.removeCartItem(userId, identifier);
 
   res.status(200).json({
     message: 'Item removed from cart',

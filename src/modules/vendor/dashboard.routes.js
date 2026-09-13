@@ -12,6 +12,9 @@ router.use('/vendor', authenticate, requireApprovedVendor);
 // GET /api/vendor/dashboard/stats -> Aggregated stats
 router.get('/vendor/dashboard/stats', dashboardController.getStats);
 
+// GET /api/vendor/earnings -> Detailed earnings and commission breakdown
+router.get('/vendor/earnings', dashboardController.getEarnings);
+
 // GET /api/vendor/dashboard/recent-orders?limit=5 -> Recent orders
 router.get('/vendor/dashboard/recent-orders', dashboardController.getRecentOrders);
 
