@@ -1,5 +1,6 @@
 const prisma = require('../../utils/prisma');
 const AppError = require('../../utils/AppError');
+const cache = require('../../utils/cache');
 const { generateSlug } = require('../category/category.service');
 
 // Public projection: strictly excludes vendorId, vendor, and vendorProfile information
@@ -123,6 +124,8 @@ const createProduct = async (vendorId, productData) => {
     },
   });
 
+  cache.invalidateTag('products');
+  cache.invalidateTag('homepage');
   return product;
 };
 
@@ -276,6 +279,8 @@ const updateVendorProduct = async (vendorId, productId, updateData) => {
     },
   });
 
+  cache.invalidateTag('products');
+  cache.invalidateTag('homepage');
   return updatedProduct;
 };
 
@@ -312,6 +317,8 @@ const softDeleteVendorProduct = async (vendorId, productId) => {
     },
   });
 
+  cache.invalidateTag('products');
+  cache.invalidateTag('homepage');
   return deactivatedProduct;
 };
 
@@ -449,6 +456,12 @@ const getPublicProducts = async (queryParams) => {
 const getTopSellingProducts = async (queryParams = {}) => {
   const limit = Math.max(1, Math.min(20, parseInt(queryParams.limit, 10) || 4));
 
+  const cacheKey = `products:top-selling:${limit}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const products = await prisma.product.findMany({
     where: { isActive: true },
     select: {
@@ -496,10 +509,79 @@ const getTopSellingProducts = async (queryParams = {}) => {
     return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
-  return {
+  const result = {
     count: Math.min(ranked.length, limit),
     products: ranked.slice(0, limit),
   };
+
+  cache.set(cacheKey, result, 30, ['products', 'orders', 'homepage']);
+  return result;
+};
+
+/**
+ * Consolidated high-speed aggregated feed for the homepage.
+ * Returns categories, top-selling, recent products, and top category products
+ * in a SINGLE roundtrip. Cached in-memory for 45s.
+ */
+const getHomepageFeed = async () => {
+  const cacheKey = 'homepage:feed';
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  // 1. Fetch categories sorted by popularity (uses internal cache)
+  const { getAllActiveCategories } = require('../category/category.service');
+  const categories = await getAllActiveCategories({ sort: 'popularity' });
+
+  // 2. Populated categories
+  const populatedCategories = categories.filter((c) => (c.productCount ?? 0) > 0);
+
+  // 3. Top selling products
+  const topSellingResult = await getTopSellingProducts({ limit: 4 });
+
+  // 4. Recent products for the "All" tab (only 10 cards needed)
+  const recentProducts = await prisma.product.findMany({
+    where: { isActive: true },
+    select: PUBLIC_PRODUCT_SELECT,
+    orderBy: [
+      { isFeatured: 'desc' },
+      { createdAt: 'desc' },
+    ],
+    take: 10,
+  });
+
+  // 5. Products for each populated category (up to 10 products each)
+  const categoryPromises = populatedCategories.map((cat) =>
+    prisma.product.findMany({
+      where: {
+        isActive: true,
+        categoryId: cat.id,
+      },
+      select: PUBLIC_PRODUCT_SELECT,
+      orderBy: [
+        { isFeatured: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      take: 10,
+    })
+  );
+
+  const categoryResults = await Promise.all(categoryPromises);
+  const categoryProductsMap = {};
+  populatedCategories.forEach((cat, idx) => {
+    categoryProductsMap[cat.slug] = categoryResults[idx] || [];
+  });
+
+  const feed = {
+    categories,
+    topSelling: topSellingResult.products || [],
+    recentProducts,
+    categoryProductsMap,
+  };
+
+  cache.set(cacheKey, feed, 45, ['products', 'categories', 'orders', 'homepage']);
+  return feed;
 };
 
 /**
@@ -535,5 +617,6 @@ module.exports = {
   softDeleteVendorProduct,
   getPublicProducts,
   getTopSellingProducts,
+  getHomepageFeed,
   getPublicProductBySlug,
 };

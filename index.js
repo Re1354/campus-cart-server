@@ -45,13 +45,16 @@ app.use(cors({
   credentials: true,
 }));
 
+const compression = require('compression');
+
+app.use(compression());
 app.use(express.json());
 app.use(cookieParser());
 
 // express-session is required ONLY for the Google OAuth handshake (state param).
-// After the callback sets the JWT cookie the session is destroyed.
-app.use(session({
-  secret: process.env.SESSION_SECRET,
+// Scoped to /api/auth to keep all product, cart, and marketplace routes 100% stateless and fast.
+const oauthSession = session({
+  secret: process.env.SESSION_SECRET || 'campus-cart-secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -59,10 +62,7 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     maxAge: 10 * 60 * 1000, // 10 minutes — just long enough for OAuth round-trip
   },
-}));
-
-app.use(passport.initialize());
-app.use(passport.session());
+});
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -71,8 +71,8 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// Auth routes
-app.use('/api/auth', authRoutes);
+// Auth routes (with OAuth session & passport)
+app.use('/api/auth', oauthSession, passport.initialize(), passport.session(), authRoutes);
 
 // Category routes
 app.use('/api', categoryRoutes);
@@ -101,3 +101,4 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+

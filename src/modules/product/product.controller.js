@@ -124,6 +124,19 @@ exports.getTopSellingProducts = catchAsync(async (req, res) => {
 });
 
 /**
+ * GET /api/products/homepage-feed
+ * High-speed aggregated feed for homepage (categories, top-selling, recent, category products).
+ * Excludes all vendor info.
+ */
+exports.getHomepageFeed = catchAsync(async (req, res) => {
+  const feed = await productService.getHomepageFeed();
+
+  // Set HTTP caching headers: 30s max-age with stale-while-revalidate
+  res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+  res.status(200).json(feed);
+});
+
+/**
  * GET /api/products/:slug
  * Get single active product detail by slug.
  * Excludes all vendor info.

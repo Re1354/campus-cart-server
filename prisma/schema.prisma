@@ -98,6 +98,10 @@ model Product {
   updatedAt     DateTime    @updatedAt
   cartItems     CartItem[]
   orderItems    OrderItem[]
+
+  @@index([categoryId, isActive])
+  @@index([isActive, isFeatured, createdAt(sort: Desc)])
+  @@index([vendorId])
 }
 
 model Cart {
@@ -130,6 +134,8 @@ model Order {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]
+
+  @@index([userId, status])
 }
 
 model OrderItem {
@@ -141,4 +147,7 @@ model OrderItem {
   vendorId    String // Snapshot of vendor userId at placement time
   quantity    Int
   priceAtTime Decimal @db.Decimal(10, 2) // Snapshot of product price at placement time
+
+  @@index([productId, orderId])
+  @@index([vendorId])
 }

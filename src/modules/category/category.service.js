@@ -1,5 +1,6 @@
 const prisma = require('../../utils/prisma');
 const AppError = require('../../utils/AppError');
+const cache = require('../../utils/cache');
 
 /**
  * Generate URL-friendly slug from category name
@@ -63,6 +64,8 @@ const createCategory = async ({ name, description, imageUrl, isActive = true }) 
       },
     });
 
+    cache.invalidateTag('categories');
+    cache.invalidateTag('homepage');
     return category;
   } catch (error) {
     if (error.code === 'P2002') {
@@ -74,6 +77,12 @@ const createCategory = async ({ name, description, imageUrl, isActive = true }) 
 };
 
 const getAllActiveCategories = async (queryParams = {}) => {
+  const cacheKey = `categories:active:${queryParams.sort || queryParams.sortByPopularity || 'default'}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const categories = await prisma.category.findMany({
     where: { isActive: true },
     include: {
@@ -131,6 +140,7 @@ const getAllActiveCategories = async (queryParams = {}) => {
     formatted.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  cache.set(cacheKey, formatted, 60, ['categories', 'homepage']);
   return formatted;
 };
 
@@ -229,6 +239,8 @@ const updateCategory = async (id, updateData) => {
       data: dataToUpdate,
     });
 
+    cache.invalidateTag('categories');
+    cache.invalidateTag('homepage');
     return updatedCategory;
   } catch (error) {
     if (error.code === 'P2002') {
@@ -283,6 +295,8 @@ const deleteCategory = async (id) => {
     where: { id },
   });
 
+  cache.invalidateTag('categories');
+  cache.invalidateTag('homepage');
   return deleted;
 };
 
@@ -304,6 +318,8 @@ const toggleCategoryStatus = async (id) => {
     data: { isActive: !category.isActive },
   });
 
+  cache.invalidateTag('categories');
+  cache.invalidateTag('homepage');
   return updated;
 };
 
@@ -325,6 +341,8 @@ const softDeleteCategory = async (id) => {
     data: { isActive: false },
   });
 
+  cache.invalidateTag('categories');
+  cache.invalidateTag('homepage');
   return deactivatedCategory;
 };
 

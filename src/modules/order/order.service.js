@@ -1,5 +1,6 @@
 const prisma = require('../../utils/prisma');
 const AppError = require('../../utils/AppError');
+const cache = require('../../utils/cache');
 
 const VALID_ORDER_STATUSES = [
   'PENDING',
@@ -179,6 +180,8 @@ const createOrder = async (userId, data) => {
     timeout: 20000,
   });
 
+  cache.invalidateTag('orders');
+  cache.invalidateTag('homepage');
   return formatBuyerOrder(createdOrder);
 };
 
@@ -309,6 +312,8 @@ const cancelBuyerOrder = async (userId, orderId) => {
     timeout: 20000,
   });
 
+  cache.invalidateTag('orders');
+  cache.invalidateTag('homepage');
   return formatBuyerOrder(cancelledOrder);
 };
 

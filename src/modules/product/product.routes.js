@@ -64,6 +64,9 @@ router.get('/products', productController.getPublicProducts);
 // GET /api/products/top-selling -> List top-selling products by order count
 router.get('/products/top-selling', productController.getTopSellingProducts);
 
+// GET /api/products/homepage-feed -> Consolidated fast homepage feed
+router.get('/products/homepage-feed', productController.getHomepageFeed);
+
 // GET /api/products/:slug -> Get single active product detail by slug
 router.get('/products/:slug', productController.getPublicProductBySlug);
 
